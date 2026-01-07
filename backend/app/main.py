@@ -3,6 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import memory_router, missions_router
+
 app = FastAPI(
     title="Quandura",
     description="Enterprise AI agent platform for local government operations",
@@ -28,3 +30,8 @@ async def health_check() -> dict[str, str]:
 async def root() -> dict[str, str]:
     """Root endpoint."""
     return {"message": "Quandura API", "docs": "/docs"}
+
+
+# Include routers
+app.include_router(missions_router, prefix="/api/v1")
+app.include_router(memory_router, prefix="/api/v1")

@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16
+    container_name: quandura-db
+    environment:
+      POSTGRES_USER: quandura
+      POSTGRES_PASSWORD: quandura
+      POSTGRES_DB: quandura
+    ports:
+      - "5432:5432"
+    volumes:
+      - quandura-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quandura"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Uncomment when needed for caching/pub-sub
+  # redis:
+  #   image: redis:7
+  #   container_name: quandura-redis
+  #   ports:
+  #     - "6379:6379"
+
+  # Uncomment when needed for semantic search
+  # chromadb:
+  #   image: chromadb/chroma:latest
+  #   container_name: quandura-chroma
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - quandura-chroma-data:/chroma/chroma
+
+volumes:
+  quandura-db-data:
+  # quandura-chroma-data:

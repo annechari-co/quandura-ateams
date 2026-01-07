@@ -1,16 +1,123 @@
-# A-Teams Enterprise Platform: Comprehensive Plan
+# Quandura Enterprise Platform: Comprehensive Plan
 
 ## Vision Statement
 
-**"The Operating System for Local Governments"**
+**Long-term (20+ years):** "The Operating System for Local Governments" - AI agent teams running entire government operations.
 
-An agentic platform that starts by solving specific departmental pain points (Risk Management) and expands to run entire government operations. End state: bare-bones human staff with agent teams handling the operational workload, managed by us as a service.
+**Near-term:** Build profitable AI-assisted services for county Risk Management, starting with safety inspections.
+
+---
+
+## Founder Advantages
+
+- Deep county government experience (not just contracting - actual operations)
+- Intimate knowledge of Risk Management and Safety Team micro-processes
+- Existing relationships with county personnel who can test in real-world environments
+- Understanding of procurement cycles at a deeper level than most contractors
+- Based in Maryland where Martinez Act creates immediate market opportunity
 
 ---
 
 ## Market Entry Strategy
 
-### Beachhead: Risk Management Departments
+### Phase 1: Safety Consulting Firm (Revenue Generation)
+
+**The Opportunity: Martinez Act (Maryland)**
+
+New legislation requires all Maryland local governments to implement self-inspection regimes. Counties are not prepared to stand up these programs quickly. They will need to outsource.
+
+**Business Model:**
+1. Launch consulting firm offering safety inspection services
+2. Use Safety Team + Inspection App as force multiplier
+3. Human inspectors augmented by agentic system
+4. Undercut traditional consulting on price while maintaining quality
+5. Each engagement is a touchpoint for upsell
+
+**Why This First:**
+- Immediate market demand (legislation-driven)
+- Founder has deep expertise in running safety teams
+- Real-world testers available through existing relationships
+- Revenue generation before investor funding needed
+- Validates the team system in production
+
+### Phase 2: Agentic Risk Management Department
+
+**Target:** Smaller counties that can't afford to spin up Risk Management departments (or can't do it quickly enough).
+
+**Model:** Sell or license an operational Risk Management department as a service.
+
+**Upsell Path:** Consulting clients → full Risk Management service
+
+### Phase 3: Agentic TPA (Third-Party Administrator)
+
+**The Market Insight:**
+
+Most US counties are self-insured but use TPAs to manage claims. These TPAs are terrible:
+- High turnover of claims managers
+- Overloaded workloads
+- Bad scheduling of services
+- Poor communication
+- This is a hole in the market
+
+**Competitive Advantage:**
+- All bidding information is publicly available
+- If system works well, we know exactly how much we can underbid and still be profitable
+- Quality can exceed incumbents because agents don't burn out
+
+**Revenue Models:**
+- Direct TPA services to counties
+- License agentic TPA system to existing TPAs
+- Hybrid models
+
+### Phase 4: Seek Investment
+
+**Timing:** When consulting firm is profitable AND we have:
+- Functional (if not fully deployed) Risk Department product
+- Strategic plan for TPA market entry
+- Demonstrated real-world performance data
+
+### Long-term: County OS (Aspirational)
+
+Expand beyond Risk Management to other departments. 20-year horizon. Not relevant to near-term planning.
+
+---
+
+## Development Strategy
+
+### Team System Architecture
+
+Build a reusable "team system" that can be instantiated for different workflows:
+
+| Team | Purpose | Status |
+|------|---------|--------|
+| **Safety Team** | Real-world deployment, revenue generation | First priority |
+| **Legal Research Team** | Test harness for team system architecture | Test/validation |
+| **Risk Management Team** | Product for small counties | After Safety validated |
+| **Claims Team (TPA)** | Market disruption play | After Risk validated |
+
+### Why Legal Research as Test Harness
+
+Legal Research Team validates:
+- Multi-agent coordination (5 agents in sequence)
+- Passport state passing through workflow
+- External tool integration
+- Document generation
+- Quality assurance patterns (Review agent)
+- Knowledge persistence (Librarian)
+
+This is not intended for deployment to actual county law departments (at least not soon). It's a controlled test of the team system before deploying Safety Team in the field.
+
+### Why Safety Team First for Deployment
+
+- Founder has deepest expertise here
+- Real testers available
+- Martinez Act creates market timing
+- Inspection app provides concrete, usable artifact
+- Revenue path is clearest
+
+---
+
+## Beachhead: Risk Management Departments
 
 **Why Risk Management:**
 - Chronically understaffed
@@ -18,20 +125,14 @@ An agentic platform that starts by solving specific departmental pain points (Ri
 - County governments have injury/incident rates far above private sector
 - Clear, measurable ROI (reduced claims = reduced spending)
 - Self-insured governments feel the pain directly
-
-**Deployment Model (Palantir-style):**
-1. Embedded team goes to department
-2. Learns their specific workflows
-3. Builds custom teams using platform templates
-4. Trains staff on basic modifications
-5. Ongoing support and optimization
-6. Expand to adjacent departments
+- Founder has extensive domain knowledge
 
 **Expansion Path:**
 ```
-Risk Management → HR → Finance → Permits → Public Works → ...
-                                    ↓
-                        Eventually: Entire Government Operations
+Safety Consulting → Risk Management Dept → TPA → (long-term) Other Departments
+        ↓                    ↓                ↓
+    Revenue              Product           Market
+   Generation             Sales          Disruption
 ```
 
 ---
@@ -536,63 +637,76 @@ class DecisionLogEntry(BaseModel):
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Months 1-3)
-**Goal:** Working prototype for single Risk Management team
+### Phase 1: Core Foundation + Legal Research Test (8-10 weeks)
+**Goal:** Working team system validated with Legal Research test harness
 
 - [ ] LangGraph state machine with Passport schema
-- [ ] Single agent team (Incident Investigation)
-- [ ] Basic memory (ChromaDB)
-- [ ] Phone intake via Twilio
-- [ ] Decision log audit trail
-- [ ] Simple web dashboard
+- [ ] Base agent class with confidence tracking
+- [ ] Legal Research Team (5 agents) as system test
+- [ ] Basic memory (ChromaDB) with multi-resolution content
+- [ ] Simple web UI for testing
+- [ ] Audit logging
 
-**Deliverable:** Demo-able incident investigation flow
+**Deliverable:** Legal Research Team processing test requests successfully
 
-### Phase 2: Multi-Team (Months 4-6)
-**Goal:** Full Risk Management department coverage
+**Validation:** Multi-agent pipeline works, state passes correctly, memory persists
 
-- [ ] All 6 Risk Management team types
-- [ ] Department Head Agent
-- [ ] Cross-team handoff protocol
-- [ ] HR/Claims system integrations
-- [ ] Full replay audit for development
-- [ ] Customer pilot deployment
+### Phase 2: Safety Team + Inspection App (6-8 weeks)
+**Goal:** Real-world deployable Safety Team
 
-**Deliverable:** Pilot with real government customer
+- [ ] Safety Team specification (based on founder expertise)
+- [ ] Inspection App (mobile-friendly, field-usable)
+- [ ] Safety-specific agents (Inspector, Report Writer, Scheduler, etc.)
+- [ ] Integration with inspection checklists and standards
+- [ ] Real-world testing with founder's contacts
 
-### Phase 3: Platform Intelligence (Months 7-9)
+**Deliverable:** Safety Team + App ready for consulting firm launch
+
+**Validation:** Real inspectors can use it in the field
+
+### Phase 3: Consulting Firm Launch (Ongoing)
+**Goal:** Revenue generation via safety inspection services
+
+- [ ] Consulting firm legal setup
+- [ ] Initial client engagements (Martinez Act opportunity)
+- [ ] Iterate based on field feedback
+- [ ] Build case studies and performance data
+
+**Deliverable:** Profitable consulting operation
+
+### Phase 4: Risk Management Department Product (6-8 weeks)
+**Goal:** Packaged Risk Management department for small counties
+
+- [ ] Full Risk Management Team suite
+- [ ] Incident Investigation Team
+- [ ] Claims Processing Team
+- [ ] Compliance Monitoring Team
+- [ ] Analytics & Reporting Team
+- [ ] Cross-team orchestration
+
+**Deliverable:** Sellable/licensable Risk Management product
+
+### Phase 5: Platform Intelligence (When Needed)
 **Goal:** Self-improving platform
 
-- [ ] Janitor per team
-- [ ] Housekeeper aggregation
-- [ ] Research Scouts (curated feeds first)
+- [ ] Janitor per team (observation)
+- [ ] Housekeeper (aggregation and proposal)
+- [ ] Research Scouts (external knowledge)
 - [ ] Proposal queue with human approval
-- [ ] Confidence calibration system
-- [ ] Performance analytics
+
+**Timing:** When multiple teams are running in production and manual monitoring becomes burdensome
 
 **Deliverable:** Platform that proposes its own improvements
 
-### Phase 4: Enterprise Ready (Months 10-12)
-**Goal:** Production-grade for multiple customers
+### Phase 6: TPA Market Entry (Year 2+)
+**Goal:** Disrupt the TPA market
 
-- [ ] Multi-tenant architecture
-- [ ] All data residency options
-- [ ] Full access control (RBAC + ABAC)
-- [ ] Compliance certifications started
-- [ ] Template marketplace foundation
-- [ ] Second department type (likely HR)
+- [ ] Claims Team for TPA operations
+- [ ] Competitive analysis using public bidding data
+- [ ] Pricing model development
+- [ ] Initial TPA contracts or partnerships
 
-**Deliverable:** Commercial launch readiness
-
-### Phase 5: Scale (Year 2)
-**Goal:** "OS for Local Governments"
-
-- [ ] Full department coverage templates
-- [ ] Managed service tier operational
-- [ ] Multiple customer deployments
-- [ ] Research Scout partnerships
-- [ ] Community contribution system
-- [ ] Cross-department orchestration
+**Deliverable:** Operational agentic TPA service
 
 ---
 
@@ -623,6 +737,21 @@ class DecisionLogEntry(BaseModel):
 
 ---
 
-*Version: 1.0*
+*Version: 2.0*
 *Created: 2025-01-05*
-*Based on: Multi-model synthesis + founder interview*
+*Updated: 2025-01-06*
+
+---
+
+## Changelog
+
+### v2.0 (2025-01-06)
+- Rewrote Vision Statement to distinguish near-term (Safety Consulting) from long-term (County OS)
+- Added Founder Advantages section
+- Added Market Entry Strategy with 4-phase progression (Safety Consulting → Risk Dept → TPA → Investment)
+- Added Development Strategy explaining Legal Research as test harness, Safety Team as first deployment
+- Restructured Implementation Phases to prioritize Safety Team
+- Added Martinez Act opportunity context
+
+### v1.0 (2025-01-05)
+- Initial plan from multi-model synthesis + founder interview
