@@ -2,6 +2,12 @@
 
 Enterprise AI agent platform for local government operations.
 
+## Session Start
+
+**Read first:** `planning/BUILD_KNOWLEDGE.md` - Dependency map and gotchas (external memory)
+
+This file documents code relationships that survive context compaction. Update it when you discover new dependencies.
+
 ## Quick Start
 
 **Start here:** `planning/QUANDURA_ARCHITECTURE.md` - Complete technical specification
@@ -10,6 +16,7 @@ Enterprise AI agent platform for local government operations.
 
 | Document | Purpose |
 |----------|---------|
+| `planning/BUILD_KNOWLEDGE.md` | **Development memory** - dependencies, gotchas, session checklist |
 | `planning/QUANDURA_ARCHITECTURE.md` | Core architecture, schemas, implementation roadmap |
 | `planning/ENTERPRISE_PLAN.md` | Business context, target market, service model |
 | `planning/teams/LAW_OFFICE_LEGAL_RESEARCH.md` | First validation team specification |

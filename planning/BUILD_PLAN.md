@@ -1,43 +1,49 @@
 # Quandura Build Plan
 
-Development sequence for the core engine and team system.
+Development sequence for core engine, team system, and first deployment.
+
+**Architecture Reference:** `QUANDURA_ARCHITECTURE.md` v2.4
 
 ---
 
-## Current State Assessment
+## Current State
 
-### What's Built (Backend Structure)
+### Backend Structure (Built)
 
-| File | Component | Status |
-|------|-----------|--------|
-| `models/passport.py` | Passport, ConfidenceVector, LedgerEntry, Mission | ✅ Complete |
-| `models/memory.py` | MemoryNode, MemoryLayer, RelationType, TeamMemorySchema | ✅ Complete |
-| `agents/base.py` | BaseAgent class with LLM calls, confidence tracking | ✅ Complete |
-| `agents/triage.py` | Triage agent (classifies/routes missions) | ✅ Complete |
-| `agents/executor.py` | Executor agent (performs work) | ✅ Complete |
-| `agents/teams/basic.py` | 2-agent team wiring | ✅ Complete |
-| `platform/orchestrator.py` | LangGraph state machine | ✅ Complete |
-| `platform/checkpointer.py` | PostgreSQL checkpoint persistence | ✅ Complete |
-| `db/models.py` | SQLAlchemy models (Tenant, Team, Passport, LedgerEntry) | ✅ Complete |
-| `db/base.py` | Async database setup | ✅ Complete |
-| `api/missions.py` | REST endpoints (create, list, get, execute) | ✅ Complete |
-| `api/schemas.py` | API request/response schemas | ✅ Complete |
-| `core/config.py` | Pydantic settings | ✅ Complete |
-| `core/redis.py` | Redis connection pool | ✅ Complete |
-| `main.py` | FastAPI app | ✅ Complete |
+| Component | File | Status |
+|-----------|------|--------|
+| Passport + Confidence | `models/passport.py` | ✅ |
+| Memory Models | `models/memory.py` | ✅ |
+| Base Agent | `agents/base.py` | ✅ |
+| Triage Agent | `agents/triage.py` | ✅ |
+| Executor Agent | `agents/executor.py` | ✅ |
+| Basic Team | `agents/teams/basic.py` | ✅ |
+| LangGraph Orchestrator | `platform/orchestrator.py` | ✅ |
+| PostgreSQL Checkpointer | `platform/checkpointer.py` | ✅ |
+| SQLAlchemy Models | `db/models.py` | ✅ |
+| Async DB Setup | `db/base.py` | ✅ |
+| REST API | `api/missions.py` | ✅ |
+| API Schemas | `api/schemas.py` | ✅ |
+| Config | `core/config.py` | ✅ |
+| Redis | `core/redis.py` | ✅ |
+| FastAPI App | `main.py` | ✅ |
 
-### What's Missing (Phase 1 Completion)
+### Phase 1 Gaps (To Build)
 
 | Component | Description | Priority |
 |-----------|-------------|----------|
 | Memory Storage | PostgreSQL persistence for MemoryNode | P0 |
-| Memory Embeddings | ChromaDB integration for semantic search | P0 |
-| Librarian Agent | Knowledge retrieval agent | P0 |
-| Judge Agent | External validation (SCoRe pattern) | P1 |
-| Legal Research Team | 5 agents for test harness | P1 |
-| Tests | Agent behavior tests | P1 |
-| Context Sandbox | Minimal context extraction for specialists | P2 |
-| Symbolic Rule Engine | Hard rules for compliance/safety | P2 |
+| Embeddings | ChromaDB integration | P0 |
+| Librarian Agent | Knowledge retrieval | P0 |
+| Judge Agent | External validation (SCoRe) | P1 |
+| **Team Templates** | YAML-based team definitions (v2.4) | P1 |
+| **Agent Lifecycle** | Session/Sandbox/Identity layers (v2.4) | P1 |
+| **Health Monitoring** | Heartbeat + staleness detection (v2.4) | P1 |
+| **Escalation System** | Categories + tiered routing (v2.4) | P1 |
+| Legal Research Team | 5-agent test harness | P1 |
+| Tests | Agent behavior coverage | P1 |
+| Context Sandbox | Minimal context per specialist | P2 |
+| Symbolic Rules | Compliance/safety hard rules | P2 |
 
 ---
 
@@ -45,46 +51,37 @@ Development sequence for the core engine and team system.
 
 **Goal:** Working team system validated with Legal Research test harness
 
-### Step 1: Environment Setup & Smoke Test (Day 1)
+### Step 1: Environment Validation
 
 ```bash
-# Create .env
-cd backend && cp .env.example .env
-# Add ANTHROPIC_API_KEY
+# Start infrastructure
+docker run -d --name quandura-db \
+  -e POSTGRES_USER=quandura \
+  -e POSTGRES_PASSWORD=quandura \
+  -e POSTGRES_DB=quandura \
+  -p 5432:5432 postgres:16
 
-# Start services
-docker run -d --name quandura-db -e POSTGRES_USER=quandura -e POSTGRES_PASSWORD=quandura -e POSTGRES_DB=quandura -p 5432:5432 postgres:16
 docker run -d --name quandura-redis -p 6379:6379 redis:7
 
-# Run migrations
+# Backend setup
+cd backend
+cp .env.example .env  # Add ANTHROPIC_API_KEY
 uv run alembic upgrade head
-
-# Start server
 uv run uvicorn app.main:app --reload
 
-# Test: Create a mission via /docs
+# Validation: Create mission via /docs
 ```
 
-**Validation:** Server starts, can create/list missions
+### Step 2: Memory Storage Layer
 
-### Step 2: Memory Storage Layer (Days 2-4)
-
-Create persistence for the memory system models.
-
-**Files to create:**
+**Files:**
 ```
 backend/app/memory/
 ├── __init__.py
-├── storage.py      # PostgreSQL storage for MemoryNode
+├── storage.py      # PostgreSQL CRUD for MemoryNode
 ├── embeddings.py   # ChromaDB integration
-└── queries.py      # Query patterns (tag filter, traversal)
+└── queries.py      # Tag filtering, traversal
 ```
-
-**Key implementations:**
-1. `MemoryStorage` class - CRUD for MemoryNode in PostgreSQL (JSONB)
-2. `EmbeddingStore` class - ChromaDB for semantic search
-3. `MemoryQuery` class - Tag filtering, relationship traversal
-4. Database migration for `memory_nodes` table
 
 **SQLAlchemy model:**
 ```python
@@ -106,26 +103,13 @@ class MemoryNodeDB(Base):
     updated_at = Column(DateTime, default=datetime.utcnow)
 ```
 
-**Validation:** Can store and retrieve memory nodes with tag filtering
+**Validation:** Store and retrieve memory nodes with tag filtering
 
-### Step 3: Librarian Agent (Days 5-7)
+### Step 3: Librarian Agent
 
-The Librarian retrieves relevant context for other agents.
+**File:** `backend/app/agents/librarian.py`
 
-**Files to create:**
-```
-backend/app/agents/librarian.py
-```
-
-**Key implementations:**
-1. Query memory by symbol pattern
-2. Query memory by tags
-3. Semantic search via embeddings
-4. Multi-resolution retrieval (micro → summary → full)
-5. Relationship traversal
-6. Context assembly for agents
-
-**Core interface:**
+**Interface:**
 ```python
 class Librarian(BaseAgent):
     async def retrieve(
@@ -139,22 +123,13 @@ class Librarian(BaseAgent):
         pattern: str | None = None,
         tags: dict[str, str] | None = None,
         layer: MemoryLayer | None = None,
-        resolution: str = "micro",
         limit: int = 20,
     ) -> list[MemoryNode]: ...
 
     async def find_similar(
         self,
         text: str,
-        layer: MemoryLayer | None = None,
         limit: int = 10,
-    ) -> list[MemoryNode]: ...
-
-    async def traverse(
-        self,
-        start_symbol: str,
-        relation_types: list[RelationType],
-        max_depth: int = 2,
     ) -> list[MemoryNode]: ...
 
     async def assemble_agent_context(
@@ -165,24 +140,13 @@ class Librarian(BaseAgent):
     ) -> AgentContext: ...
 ```
 
-**Validation:** Can retrieve relevant memory for a test query
+**Validation:** Retrieve relevant memory for test query
 
-### Step 4: Judge Agent (Days 8-9)
+### Step 4: Judge Agent
 
-External validation for agent outputs (SCoRe pattern).
+**File:** `backend/app/agents/judge.py`
 
-**Files to create:**
-```
-backend/app/agents/judge.py
-```
-
-**Key implementations:**
-1. Schema validation
-2. Symbolic rule checking (basic version)
-3. Semantic verification via LLM
-4. Feedback generation for rejections
-
-**Core interface:**
+**Interface:**
 ```python
 class JudgeAgent(BaseAgent):
     async def judge(
@@ -194,13 +158,135 @@ class JudgeAgent(BaseAgent):
     ) -> JudgmentResult: ...
 ```
 
-**Validation:** Can accept/reject outputs with feedback
+**Validation:** Accept/reject outputs with feedback
 
-### Step 5: Legal Research Team (Days 10-14)
+### Step 5: Team Templates (v2.4)
 
-Test harness team with 5 agents.
+**Files:**
+```
+backend/app/teams/
+├── __init__.py
+├── schema.py       # TeamTemplate Pydantic model
+├── loader.py       # YAML parsing + validation
+└── registry.py     # Template storage/retrieval
+```
 
-**Files to create:**
+**Template structure:** (from architecture v2.4)
+```yaml
+team:
+  id: legal-research
+  name: Legal Research Team
+  version: "1.0"
+
+roles:
+  - id: triage
+    name: Research Intake
+    subscriptions: ["Ⓜ:*:legal:*"]
+    capabilities: [classify, extract_requirements]
+
+workflows:
+  - id: standard-research
+    name: Standard Legal Research
+    steps:
+      - id: intake
+        agent: triage
+        next: research
+      - id: research
+        agent: researcher
+        next: analyze
+
+escalation:
+  categories: [decision, help, blocked, failed]
+  tiers:
+    - level: 1
+      target: team_orchestrator
+    - level: 2
+      target: department_head
+    - level: 3
+      target: human
+
+health:
+  heartbeat_interval_seconds: 60
+  stale_threshold_seconds: 300
+  very_stale_threshold_seconds: 900
+```
+
+**Validation:** Load team from YAML, instantiate agents
+
+### Step 6: Agent Lifecycle Layers (v2.4)
+
+**File:** `backend/app/agents/lifecycle.py`
+
+**Model:**
+```python
+class AgentLifecycle(BaseModel):
+    # Identity Layer (persistent until reassigned)
+    agent_id: str
+    role_definition: str
+    subscriptions: list[str]
+    historical_accuracy: float
+    created_at: datetime
+
+    # Sandbox Layer (per-mission)
+    current_mission_id: str | None
+    sandbox_path: str | None
+    work_state: dict
+
+    # Session Layer (ephemeral, can cycle)
+    session_id: str | None
+    context_tokens_used: int = 0
+    last_active: datetime | None = None
+```
+
+**Validation:** Session can cycle while sandbox/identity persist
+
+### Step 7: Escalation System (v2.4)
+
+**File:** `backend/app/escalation/`
+
+**Categories:**
+```python
+class EscalationCategory(str, Enum):
+    DECISION = "decision"      # Multiple valid paths
+    HELP = "help"              # Need guidance
+    BLOCKED = "blocked"        # Unresolvable dependency
+    FAILED = "failed"          # Unexpected error
+    EMERGENCY = "emergency"    # Security/data integrity
+    GATE_TIMEOUT = "gate_timeout"  # Async condition failed
+    LIFECYCLE = "lifecycle"    # Agent stuck
+```
+
+**Tiered routing:**
+```
+Agent → Team Orchestrator → Dept Head → Human (Ⓗ)
+```
+
+**Validation:** Escalation routes correctly by category and tier
+
+### Step 8: Health Monitoring (v2.4)
+
+**File:** `backend/app/health/`
+
+**Config:**
+```python
+class HeartbeatConfig(BaseModel):
+    interval_seconds: int = 60
+    stale_threshold_seconds: int = 300
+    very_stale_threshold_seconds: int = 900
+```
+
+**Staleness states:**
+| Heartbeat Age | State | Action |
+|---------------|-------|--------|
+| < 5 min | Fresh | None |
+| 5-15 min | Stale | Check for pending work |
+| > 15 min | Very Stale | Alert orchestrator |
+
+**Validation:** Detect stale agents, trigger alerts
+
+### Step 9: Legal Research Team (Test Harness)
+
+**Files:**
 ```
 backend/app/agents/teams/legal_research/
 ├── __init__.py
@@ -212,34 +298,16 @@ backend/app/agents/teams/legal_research/
 └── reviewer.py        # Quality Reviewer agent
 ```
 
-**Team flow:**
+**Flow:**
 ```
-Mission arrives
-    │
-    ▼
-Research Intake → Classify, extract requirements
-    │
-    ▼
-Legal Researcher → Find relevant authorities
-    │
-    ▼
-Citation Analyst → Verify citations, check conflicts
-    │
-    ▼
-Opinion Drafter → Write draft opinion
-    │
-    ▼
-Quality Reviewer → Review, approve or request revision
-    │
-    ▼
-Mission complete
+Mission → Intake → Researcher → Analyst → Drafter → Reviewer → Complete
 ```
 
-**Validation:** Can process a test legal research request end-to-end
+**Validation:** Process test legal research request end-to-end
 
-### Step 6: Tests (Days 15-16)
+### Step 10: Tests
 
-**Files to create:**
+**Files:**
 ```
 backend/tests/
 ├── conftest.py
@@ -247,49 +315,53 @@ backend/tests/
 ├── test_memory.py
 ├── test_librarian.py
 ├── test_judge.py
+├── test_team_templates.py
+├── test_lifecycle.py
+├── test_escalation.py
+├── test_health.py
 └── test_legal_research_team.py
 ```
 
-**Key test cases:**
-1. Passport state persistence across checkpoints
-2. Memory CRUD and tag filtering
-3. Librarian retrieval at different resolutions
-4. Judge acceptance/rejection logic
-5. Legal Research Team end-to-end flow
-
-**Validation:** Tests pass, coverage > 80%
+**Coverage target:** > 80%
 
 ---
 
 ## Phase 1 Completion Checklist
 
+### Core Engine
 - [ ] Environment runs (PostgreSQL, Redis, FastAPI)
-- [ ] Memory storage layer persists nodes
-- [ ] ChromaDB stores and retrieves embeddings
+- [ ] Memory storage persists nodes
+- [ ] ChromaDB stores/retrieves embeddings
 - [ ] Librarian retrieves relevant context
 - [ ] Judge validates outputs with feedback
-- [ ] Legal Research Team processes test request
-- [ ] Tests pass with > 80% coverage
+
+### v2.4 Additions
+- [ ] Team templates load from YAML
+- [ ] Agent lifecycle layers work (session cycles, sandbox persists)
+- [ ] Escalation routes by category and tier
+- [ ] Health monitoring detects stale agents
+
+### Validation
 - [ ] Passport persists across restarts
 - [ ] Confidence scores recorded in ledger
 - [ ] Tenant isolation works (RLS)
-
-**Estimated time:** 2-3 weeks
+- [ ] Legal Research Team processes test request
+- [ ] Tests pass with > 80% coverage
 
 ---
 
 ## Phase 2: Safety Team + Inspection App
 
-**Prerequisites:** Phase 1 complete and validated
+**Prerequisites:** Phase 1 complete
 
-### Step 1: Inspection App Backend (Week 1-2)
+See `field-app/FIELD_APP_SPEC.md` for complete data model.
+See `teams/SAFETY_TEAM.md` for agent specifications.
 
-Implement data model from `planning/field-app/FIELD_APP_SPEC.md`:
+### Step 1: Inspection App Backend
 
-**Files to create:**
+**Files:**
 ```
 backend/app/inspection/
-├── __init__.py
 ├── models.py       # Facility, Room, Equipment, Inspection, Finding
 ├── schemas.py      # API schemas
 ├── storage.py      # Database operations
@@ -297,21 +369,11 @@ backend/app/inspection/
 └── report.py       # PDF generation
 ```
 
-**Key endpoints:**
-- Facilities CRUD
-- Floor plans upload/management
-- Room inventory
-- Inspection workflow (start, checklist, findings, complete)
-- Report generation
+### Step 2: Safety Team Agents
 
-### Step 2: Safety Team Agents (Week 2-3)
-
-Implement agents from `planning/teams/SAFETY_TEAM.md`:
-
-**Files to create:**
+**Files:**
 ```
 backend/app/agents/teams/safety/
-├── __init__.py
 ├── orchestrator.py     # Safety Team Orchestrator
 ├── scheduler.py        # Scheduler Agent
 ├── inspector.py        # Inspector Assistant Agent
@@ -321,16 +383,15 @@ backend/app/agents/teams/safety/
 └── librarian.py        # Safety-specific Librarian
 ```
 
-### Step 3: Memory Integration (Week 3)
+### Step 3: Memory Integration
 
-Implement data flow from `planning/field-app/MEMORY_INTEGRATION.md`:
-
-- Automatic tag generation on entity save
-- Multi-resolution content generation
+From `field-app/MEMORY_INTEGRATION.md`:
+- Automatic tag generation
+- Multi-resolution content
 - Relationship creation
-- Precedent matching for findings
+- Precedent matching
 
-### Step 4: Inspection App Frontend (Week 3-4)
+### Step 4: Inspection App Frontend
 
 **Tech:** React PWA with offline capability
 
@@ -340,64 +401,25 @@ Implement data flow from `planning/field-app/MEMORY_INTEGRATION.md`:
 - Finding capture with photos
 - Report preview
 
-### Step 5: Field Testing (Week 4+)
+### Phase 2 Completion Checklist
 
-Real-world testing with founder's contacts.
-
----
-
-## Development Sequence Summary
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         PHASE 1: CORE ENGINE                         │
-│                           (2-3 weeks)                                │
-├─────────────────────────────────────────────────────────────────────┤
-│  Week 1                          │  Week 2                          │
-│  ─────────────                   │  ─────────────                   │
-│  • Environment setup             │  • Legal Research Team           │
-│  • Memory storage layer          │  • Tests                         │
-│  • ChromaDB integration          │  • Integration testing           │
-│  • Librarian agent               │                                  │
-│  • Judge agent                   │                                  │
-└──────────────────────────────────┴──────────────────────────────────┘
-                                   │
-                                   ▼ Phase 1 validated
-┌─────────────────────────────────────────────────────────────────────┐
-│                    PHASE 2: SAFETY TEAM + APP                        │
-│                           (4-6 weeks)                                │
-├─────────────────────────────────────────────────────────────────────┤
-│  Week 1-2                        │  Week 3-4                        │
-│  ─────────────                   │  ─────────────                   │
-│  • Inspection backend            │  • Inspection frontend (PWA)     │
-│  • Safety Team agents            │  • Memory integration            │
-│  • API endpoints                 │  • Field testing                 │
-└──────────────────────────────────┴──────────────────────────────────┘
-                                   │
-                                   ▼ Phase 2 validated
-┌─────────────────────────────────────────────────────────────────────┐
-│                   PHASE 3: CONSULTING LAUNCH                         │
-│                           (Ongoing)                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│  • Real client engagements                                          │
-│  • Iterate based on feedback                                        │
-│  • Build case studies                                               │
-└─────────────────────────────────────────────────────────────────────┘
-```
+- [ ] Inspector completes full facility inspection on mobile
+- [ ] PDF report matches RiskI format
+- [ ] Safety agents analyze findings
+- [ ] Corrective action tracking works
+- [ ] Memory integration stores inspection data
 
 ---
 
 ## Parallel Work Opportunities
 
-While colleague tests Legal Research Team (Phase 1 validation):
-
-**Can start in parallel:**
-- Inspection App backend data model (no agent dependencies)
+### Can start during Phase 1 testing:
+- Inspection App data model (no agent deps)
 - Facility/Room/Equipment CRUD
-- Basic inspection workflow (non-AI parts)
+- Basic inspection workflow (non-AI)
 - PDF report template
 
-**Must wait for Phase 1:**
+### Must wait for Phase 1:
 - Safety Team agents
 - Inspector Assistant (needs Librarian)
 - Memory integration (needs storage layer)
@@ -405,6 +427,30 @@ While colleague tests Legal Research Team (Phase 1 validation):
 
 ---
 
-*Version: 1.0*
-*Created: 2025-01-06*
-*Status: Development plan for Phase 1 and Phase 2*
+## Document Relationships
+
+```
+QUANDURA_ARCHITECTURE.md (v2.4)  ← Source of truth
+         │
+         ├── BUILD_PLAN.md (this file)  ← Development sequence
+         │
+         ├── BUILD_CONSIDERATIONS.md  ← Phase-specific decisions
+         │
+         ├── teams/
+         │   ├── LAW_OFFICE_LEGAL_RESEARCH.md  ← Test harness spec
+         │   └── SAFETY_TEAM.md  ← Phase 2 spec
+         │
+         ├── field-app/
+         │   ├── FIELD_APP_SPEC.md  ← Data model + UI
+         │   └── MEMORY_INTEGRATION.md  ← Memory patterns
+         │
+         └── research/
+             ├── UNIQ_SPEC.md  ← Communication grammar
+             ├── GHOST_TOWN.md  ← Gas Town patterns adopted
+             └── SCENARIO_OHS_INSPECTION.md  ← Reference workflow
+```
+
+---
+
+*Version: 2.0 (synced with Architecture v2.4)*
+*Updated: 2025-01-08*
