@@ -742,6 +742,71 @@ class BaseAgent(ABC, Generic[T]):
         return passport
 ```
 
+### Agent Lifecycle Layers
+
+Agents have three independent lifecycle layers (adapted from Gas Town patterns):
+
+| Layer | Component | Lifecycle | What It Holds |
+|-------|-----------|-----------|---------------|
+| **Session** | LLM context window | Ephemeral | Current reasoning, conversation |
+| **Sandbox** | Mission workspace | Persistent (per mission) | Work state, artifacts, progress |
+| **Identity** | Agent registration | Persistent | Role, subscriptions, history |
+
+```python
+class AgentLifecycle(BaseModel):
+    """Three-layer agent lifecycle management."""
+
+    # Identity Layer (persistent)
+    agent_id: str
+    role_definition: str           # Reference to role template
+    subscriptions: list[str]       # UNI-Q patterns this agent handles
+    historical_accuracy: float     # Calibration data
+    created_at: datetime
+
+    # Sandbox Layer (per-mission)
+    current_mission_id: str | None
+    sandbox_path: str | None       # Workspace location
+    sandbox_created_at: datetime | None
+    work_state: dict               # Checkpointed state
+
+    # Session Layer (ephemeral)
+    session_id: str | None
+    session_started_at: datetime | None
+    context_tokens_used: int = 0
+
+
+class SessionCycleReason(str, Enum):
+    """Why a session ended."""
+
+    HANDOFF = "handoff"             # Voluntary handoff between steps
+    CONTEXT_LIMIT = "context_limit" # Hit token limit
+    TIMEOUT = "timeout"             # Inactivity timeout
+    CRASH = "crash"                 # Error/failure
+    COMPLETION = "completion"       # Work done
+
+
+async def cycle_session(agent: AgentLifecycle, reason: SessionCycleReason) -> None:
+    """
+    Cycle the session layer while preserving sandbox and identity.
+
+    Session cycling is NORMAL OPERATION - the agent continues working
+    with a fresh context while sandbox state persists.
+    """
+    # Checkpoint current state to sandbox
+    await checkpoint_to_sandbox(agent)
+
+    # End session
+    agent.session_id = None
+    agent.session_started_at = None
+    agent.context_tokens_used = 0
+
+    # If not completion, spawn new session
+    if reason != SessionCycleReason.COMPLETION:
+        await spawn_new_session(agent)
+```
+
+**Key insight:** Session cycling (LLM restarts) is normal. The sandbox preserves work state. This allows long-running tasks to span multiple LLM context windows.
+
 ### Agent Communication Pattern
 
 ```
@@ -772,6 +837,241 @@ Rules:
 - Team Orchestrators report to Department Head
 - Cross-team communication goes through Department Head
 - Librarians share knowledge through Platform Intelligence layer
+```
+
+---
+
+## Team Template Schema
+
+Teams are defined declaratively via YAML templates. This allows teams to be **configured** rather than coded.
+
+```yaml
+# team_templates/legal_research.yaml
+name: "Legal Research Team"
+version: "1.0"
+description: "Research legal questions and provide citations"
+
+# Role definitions (externalized from code)
+roles:
+  orchestrator:
+    type: orchestrator
+    description: "Coordinates team work, handles escalations"
+    subscriptions:
+      - "Ⓠ{team}·*"           # All queries to this team
+      - "Ⓔ{team}·*"           # All escalations
+    capabilities:
+      - task_decomposition
+      - work_assignment
+      - progress_tracking
+
+  researcher:
+    type: specialist
+    description: "Searches databases, gathers relevant cases"
+    subscriptions:
+      - "Ⓣresearcher·*"       # Tasks assigned to this role
+    capabilities:
+      - legal_database_search
+      - case_citation
+      - statute_lookup
+    tools:
+      - westlaw_search
+      - lexis_search
+      - court_records
+
+  reviewer:
+    type: specialist
+    description: "Verifies citations, checks quality"
+    subscriptions:
+      - "Ⓥresearcher·*·pending-review"
+    capabilities:
+      - citation_verification
+      - quality_check
+      - cross_reference
+
+  drafter:
+    type: specialist
+    description: "Generates opinion documents"
+    subscriptions:
+      - "Ⓥreviewer·*·approved"
+    capabilities:
+      - document_generation
+      - memo_formatting
+      - citation_integration
+    templates:
+      - legal_opinion
+      - research_memo
+      - case_brief
+
+  librarian:
+    type: librarian
+    description: "Team knowledge persistence and retrieval"
+    subscriptions:
+      - "Ⓠlibrarian·*"
+    memory_layers:
+      - precedents
+      - research_history
+      - citation_patterns
+
+# Workflow definitions (molecule-style step tracking)
+workflows:
+  legal_opinion:
+    description: "Full legal opinion workflow"
+    steps:
+      - id: intake
+        role: orchestrator
+        description: "Parse request, identify research questions"
+        outputs: [research_questions, scope_definition]
+
+      - id: research
+        role: researcher
+        needs: [intake]
+        description: "Search databases, gather relevant cases"
+        outputs: [case_findings, statute_references]
+
+      - id: review
+        role: reviewer
+        needs: [research]
+        description: "Verify citations, check quality"
+        outputs: [verified_citations, quality_score]
+        gate:
+          condition: "quality_score >= 0.8"
+          on_fail: "return_to_research"
+
+      - id: draft
+        role: drafter
+        needs: [review]
+        description: "Generate opinion document"
+        outputs: [draft_document]
+        template: legal_opinion
+
+      - id: signoff
+        type: human
+        role: "Ⓗattorney"
+        needs: [draft]
+        description: "Attorney approval"
+        actions: [approve, revise, reject]
+
+# Escalation routing
+escalation:
+  decision:
+    route: orchestrator
+    description: "Multiple valid paths, need choice"
+  help:
+    route: orchestrator
+    description: "Need guidance or expertise"
+  blocked:
+    route: department_head
+    description: "Waiting on external dependency"
+  failed:
+    route: orchestrator
+    description: "Unexpected error, can't proceed"
+  emergency:
+    route: human
+    description: "Security or data integrity issue"
+  gate_timeout:
+    route: orchestrator
+    description: "Workflow gate didn't resolve"
+  lifecycle:
+    route: orchestrator
+    description: "Agent stuck or needs intervention"
+
+# Health monitoring thresholds
+health:
+  heartbeat_interval_seconds: 60
+  stale_threshold_seconds: 300      # 5 min - nudge if work pending
+  intervention_threshold_seconds: 900  # 15 min - intervene
+
+# De-scaffolding progression
+autonomy:
+  initial_level: 1
+  progression:
+    level_2:
+      requires:
+        completed_tasks: 50
+        accuracy_rate: 0.85
+      grants:
+        can_skip_low_risk_review: true
+    level_3:
+      requires:
+        completed_tasks: 200
+        accuracy_rate: 0.90
+      grants:
+        can_auto_approve_routine: true
+```
+
+### Team Instantiation
+
+```python
+class TeamTemplate(BaseModel):
+    """Parsed team template."""
+
+    name: str
+    version: str
+    description: str
+    roles: dict[str, RoleDefinition]
+    workflows: dict[str, WorkflowDefinition]
+    escalation: dict[str, EscalationRoute]
+    health: HealthConfig
+    autonomy: AutonomyConfig
+
+
+class TeamFactory:
+    """Create team instances from templates."""
+
+    async def create_team(
+        self,
+        template_name: str,
+        tenant_id: str,
+        team_id: str,
+        config_overrides: dict | None = None,
+    ) -> "Team":
+        """
+        Instantiate a team from a template.
+
+        Args:
+            template_name: Name of template (e.g., "legal_research")
+            tenant_id: Tenant this team belongs to
+            team_id: Unique ID for this team instance
+            config_overrides: Optional overrides for template values
+        """
+        template = await self.load_template(template_name)
+
+        # Apply overrides
+        if config_overrides:
+            template = self.apply_overrides(template, config_overrides)
+
+        # Create orchestrator
+        orchestrator = await self.create_agent(
+            template.roles["orchestrator"],
+            team_id=team_id,
+            tenant_id=tenant_id,
+        )
+
+        # Create specialists
+        specialists = {}
+        for role_name, role_def in template.roles.items():
+            if role_def.type == "specialist":
+                specialists[role_name] = await self.create_agent(
+                    role_def,
+                    team_id=team_id,
+                    tenant_id=tenant_id,
+                )
+
+        # Create librarian
+        librarian = await self.create_librarian(
+            template.roles["librarian"],
+            team_id=team_id,
+            tenant_id=tenant_id,
+        )
+
+        return Team(
+            team_id=team_id,
+            tenant_id=tenant_id,
+            template=template,
+            orchestrator=orchestrator,
+            specialists=specialists,
+            librarian=librarian,
+        )
 ```
 
 ---
@@ -828,6 +1128,49 @@ UNI-Q is a token-efficient grammar for agent-to-agent communication. It provides
 
 # Metric event
 Ⓜmetric·revenue⟨team:ohs·amount:4050·mission:inspection-2024-0089⟩
+```
+
+### Standard Message Types
+
+Common message patterns for team coordination:
+
+| Message Type | Pattern | Use Case |
+|--------------|---------|----------|
+| **Task Assignment** | `Ⓣ{role}·{task}⟨mission:{id}⟩` | Assign work to specialist |
+| **Task Complete** | `Ⓥ{agent}·{task}·done✓` | Signal task completion |
+| **Query** | `Ⓠ{target}·{topic}?` | Request information |
+| **Response** | `Ⓐ{agent}·{topic}·response` | Provide requested info |
+| **Escalation** | `Ⓔ{agent}·{category}·{severity}` | Escalate issue |
+| **Human Action** | `Ⓗ{role}·{action}` | Human involvement needed |
+| **External** | `Ⓖ{direction}·{source/dest}` | Gateway message |
+| **Metric** | `Ⓜmetric·{type}⟨data⟩` | Analytics event |
+| **Handoff** | `↻{agent}·context-transfer` | Session continuity |
+| **Progress** | `Ⓥ{agent}·progress⟨step:{n}·total:{m}⟩` | Workflow progress |
+
+**Workflow Messages:**
+
+```
+# Step completion with auto-advance
+Ⓥresearcher·step-2·done✓⟨workflow:legal_opinion·next:review⟩
+
+# Gate check
+Ⓥreviewer·gate-check⟨condition:quality_score·value:0.85·passed:true⟩
+
+# Workflow complete
+Ⓥorchestrator·workflow·complete✓⟨workflow:legal_opinion·mission:m-123⟩
+```
+
+**Lifecycle Messages:**
+
+```
+# Agent health
+Ⓥ{agent}·heartbeat⟨ts:1704567890·status:active⟩
+
+# Session cycle
+↻{agent}·session-cycle⟨reason:context_limit·state:checkpointed⟩
+
+# Stuck detection
+Ⓔwitness·lifecycle·medium⟨agent:{id}·idle_seconds:600⟩
 ```
 
 ### Multi-Resolution Content
@@ -1003,6 +1346,114 @@ Agent identifies need for human action
 ```
 
 **Key insight:** Humans are slow, expensive agents. Same routing, same audit trail.
+
+### Escalation Categories
+
+Structured escalation with categories for routing and severity (adapted from Gas Town):
+
+```python
+class EscalationCategory(str, Enum):
+    """Categories for structured escalation routing."""
+
+    DECISION = "decision"       # Multiple valid paths, need choice
+    HELP = "help"               # Need guidance or expertise
+    BLOCKED = "blocked"         # Waiting on unresolvable dependency
+    FAILED = "failed"           # Unexpected error, can't proceed
+    EMERGENCY = "emergency"     # Security or data integrity issue
+    GATE_TIMEOUT = "gate_timeout"  # Workflow gate didn't resolve
+    LIFECYCLE = "lifecycle"     # Agent stuck or needs intervention
+
+
+class EscalationSeverity(str, Enum):
+    """Severity levels for prioritization."""
+
+    CRITICAL = "critical"  # P0 - System-threatening, immediate attention
+    HIGH = "high"          # P1 - Important blocker, needs human soon
+    MEDIUM = "medium"      # P2 - Standard escalation, human at convenience
+
+
+class Escalation(BaseModel):
+    """Structured escalation request."""
+
+    escalation_id: str
+    mission_id: str
+    category: EscalationCategory
+    severity: EscalationSeverity
+    source_agent: str
+    description: str
+    context: dict                  # Relevant state for decision
+    created_at: datetime
+
+    # For decision category
+    options: list[str] | None = None
+    recommendation: str | None = None
+
+    # Routing
+    routed_to: str | None = None   # Agent/human that should handle
+    forwarded_from: str | None = None  # If escalated up the chain
+
+
+class EscalationRouter:
+    """Route escalations based on category and team config."""
+
+    def route(
+        self,
+        escalation: Escalation,
+        team_config: "TeamTemplate",
+    ) -> str:
+        """
+        Determine escalation target based on category.
+
+        Returns agent_id or human role to handle escalation.
+        """
+        routing = team_config.escalation.get(escalation.category.value)
+
+        if routing:
+            return routing.route
+
+        # Default routing by category
+        defaults = {
+            EscalationCategory.DECISION: "orchestrator",
+            EscalationCategory.HELP: "orchestrator",
+            EscalationCategory.BLOCKED: "department_head",
+            EscalationCategory.FAILED: "orchestrator",
+            EscalationCategory.EMERGENCY: "Ⓗemergency-contact",
+            EscalationCategory.GATE_TIMEOUT: "orchestrator",
+            EscalationCategory.LIFECYCLE: "orchestrator",
+        }
+        return defaults[escalation.category]
+```
+
+### Tiered Escalation Flow
+
+```
+Agent encounters issue
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  Escalate with category + severity  │
+└─────────────────┬───────────────────┘
+                  │
+                  ▼
+         ┌───────────────┐
+         │  Team         │  Can resolve?
+         │  Orchestrator │──────────────────► Resolution
+         └───────┬───────┘       yes
+                 │ no
+                 ▼
+         ┌───────────────┐
+         │  Department   │  Can resolve?
+         │  Head         │──────────────────► Resolution
+         └───────┬───────┘       yes
+                 │ no
+                 ▼
+         ┌───────────────┐
+         │  Ⓗ Human      │  Resolution
+         │  (Final tier) │
+         └───────────────┘
+```
+
+Each tier can resolve OR forward. The escalation chain is tracked for audit.
 
 ---
 
@@ -1208,6 +1659,138 @@ MetricEvent(
 ```
 Ⓜmetric·mission-completed⟨team:ohs·type:inspection·duration:12d⟩
 ```
+
+---
+
+## Health Monitoring
+
+Agent health monitoring with intelligent triage (adapted from Gas Town watchdog patterns).
+
+### Heartbeat System
+
+```python
+class AgentHeartbeat(BaseModel):
+    """Agent health signal."""
+
+    agent_id: str
+    team_id: str
+    timestamp: datetime
+    status: Literal["active", "idle", "processing"]
+    current_mission_id: str | None
+    current_step: str | None
+    context_tokens_used: int
+    session_duration_seconds: int
+
+
+class HeartbeatConfig(BaseModel):
+    """Health monitoring thresholds."""
+
+    heartbeat_interval_seconds: int = 60
+    stale_threshold_seconds: int = 300      # 5 min
+    intervention_threshold_seconds: int = 900  # 15 min
+
+
+class AgentHealthStatus(str, Enum):
+    """Derived health status from heartbeat age."""
+
+    FRESH = "fresh"        # < stale_threshold - healthy
+    STALE = "stale"        # >= stale, < intervention - nudge if work pending
+    UNRESPONSIVE = "unresponsive"  # >= intervention - intervene
+```
+
+### Health Check Logic
+
+```python
+class HealthMonitor:
+    """Monitor agent health and trigger interventions."""
+
+    def __init__(self, config: HeartbeatConfig):
+        self.config = config
+
+    def assess_health(
+        self,
+        heartbeat: AgentHeartbeat | None,
+        current_time: datetime,
+    ) -> AgentHealthStatus:
+        """Assess agent health from heartbeat."""
+        if heartbeat is None:
+            return AgentHealthStatus.UNRESPONSIVE
+
+        age_seconds = (current_time - heartbeat.timestamp).total_seconds()
+
+        if age_seconds < self.config.stale_threshold_seconds:
+            return AgentHealthStatus.FRESH
+        elif age_seconds < self.config.intervention_threshold_seconds:
+            return AgentHealthStatus.STALE
+        else:
+            return AgentHealthStatus.UNRESPONSIVE
+
+    async def handle_stale_agent(
+        self,
+        agent_id: str,
+        has_pending_work: bool,
+    ) -> None:
+        """Handle stale agent - nudge if work pending."""
+        if has_pending_work:
+            await self.send_nudge(agent_id, "Health check: work pending")
+
+    async def handle_unresponsive_agent(
+        self,
+        agent_id: str,
+    ) -> None:
+        """Handle unresponsive agent - escalate to orchestrator."""
+        escalation = Escalation(
+            escalation_id=generate_id(),
+            mission_id=None,
+            category=EscalationCategory.LIFECYCLE,
+            severity=EscalationSeverity.HIGH,
+            source_agent="health_monitor",
+            description=f"Agent {agent_id} unresponsive for >{self.config.intervention_threshold_seconds}s",
+            context={"agent_id": agent_id},
+            created_at=datetime.utcnow(),
+        )
+        await self.escalate(escalation)
+```
+
+### Orchestrator Health Responsibilities
+
+Team Orchestrators are responsible for monitoring their specialists:
+
+```python
+class OrchestratorHealthDuties:
+    """Health monitoring performed by team orchestrators."""
+
+    async def patrol_cycle(self) -> None:
+        """Periodic health check of team agents."""
+        for agent_id in self.team_agents:
+            heartbeat = await self.get_latest_heartbeat(agent_id)
+            status = self.health_monitor.assess_health(heartbeat, datetime.utcnow())
+
+            match status:
+                case AgentHealthStatus.FRESH:
+                    pass  # Healthy
+                case AgentHealthStatus.STALE:
+                    pending = await self.has_pending_work(agent_id)
+                    await self.health_monitor.handle_stale_agent(agent_id, pending)
+                case AgentHealthStatus.UNRESPONSIVE:
+                    await self.health_monitor.handle_unresponsive_agent(agent_id)
+
+    async def handle_session_cycle(
+        self,
+        agent_id: str,
+        reason: SessionCycleReason,
+    ) -> None:
+        """Handle agent session cycling."""
+        if reason == SessionCycleReason.CRASH:
+            # Log crash, consider intervention
+            await self.log_agent_crash(agent_id)
+
+        if reason != SessionCycleReason.COMPLETION:
+            # Respawn session with checkpointed state
+            await self.respawn_agent_session(agent_id)
+```
+
+**Key insight:** Health monitoring is an orchestrator responsibility, not a separate daemon. This keeps the fractal pattern consistent.
 
 ---
 
@@ -2798,10 +3381,22 @@ For the new Claude instance taking over implementation:
 
 ---
 
-*Version: 2.3*
+*Version: 2.4*
 *Created: 2025-01-05*
 *Updated: 2025-01-08*
 *Status: Complete architecture specification for implementation handoff*
+
+## Changes in v2.4
+
+- Added Team Template Schema (YAML-based team configuration)
+- Added Agent Lifecycle Layers (Session/Sandbox/Identity separation from Gas Town)
+- Added Escalation Categories (decision, help, blocked, failed, emergency, gate_timeout, lifecycle)
+- Added Tiered Escalation Flow (Team Orchestrator → Department Head → Human)
+- Added Standard Message Types catalog for UNI-Q
+- Added Workflow step tracking with gates and auto-advance
+- Added Health Monitoring section with heartbeat system
+- Added Orchestrator Health Responsibilities
+- Referenced Gas Town framework analysis in `planning/research/GHOST_TOWN.md`
 
 ## Changes in v2.3
 
