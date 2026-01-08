@@ -7,6 +7,9 @@ This folder contains research findings and design specs that will inform Quandur
 | Document | Description | Status |
 |----------|-------------|--------|
 | `UNIQ_SPEC.md` | Token-efficient agent communication grammar | Ready for implementation |
+| `UNIQ_EXAMPLES.md` | Practical scenarios: decision traces, cross-team coordination | Ready for implementation |
+| `token_count.py` | Token efficiency benchmarks (tiktoken) | Complete |
+| `uniq_benchmark.py` | LLM reasoning quality benchmarks (needs API key) | Draft |
 | `GHOST_TOWN.md` | Analysis of Steve Yegge's agent framework | Pending |
 | `AGENT_LANGUAGE.md` | Agent-specific language concepts | Pending |
 
