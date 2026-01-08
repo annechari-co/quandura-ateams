@@ -613,6 +613,231 @@ class Subscription(BaseModel):
 
 ---
 
+## Fractal Architecture
+
+UNI-Q applies the same patterns at every organizational level. This creates a "fractal" system where the communication model is identical whether you're looking at departments, teams, or individual agents.
+
+### Principle: Same Pattern at Every Level
+
+| Level | Publisher | Hub (Router) | Subscribers |
+|-------|-----------|--------------|-------------|
+| Department | Team Orchestrators | Dept Head | Other Team Orchestrators |
+| Team | Specialist Agents | Team Orchestrator | Other Specialists |
+| Agent | Sub-tasks | Agent | Sub-task handlers |
+
+At every level:
+- Same UNI-Q micro format for messages
+- Same subscription mechanism for routing
+- Same resolution system (micro/summary/full)
+- Hub-and-spoke discipline maintained (orchestrator routes all messages)
+
+### Why Fractal?
+
+1. **One pattern to implement** - Subscription/routing logic is identical everywhere
+2. **One pattern to debug** - Same tools work at every level
+3. **Composable** - A team can be treated as an "agent" at department level
+4. **Emergent scaling** - Add sub-teams without new patterns
+
+---
+
+## Mission Sandboxes
+
+Cross-team transactions spin up their own sandbox - an isolated context shared only by teams working on that specific transaction.
+
+### What is a Mission Sandbox?
+
+```python
+class MissionSandbox(BaseModel):
+    """Cross-team sandbox for a specific transaction."""
+
+    mission_id: str
+    tenant_id: str
+
+    # Shared context (accessible to all participating teams)
+    shared_artifacts: dict[str, str]  # contract doc, etc.
+    message_thread: list[str]         # UNI-Q micro messages
+    published_findings: dict[str, str]  # team_id -> finding ref
+
+    # Participating teams
+    team_subscriptions: dict[str, list[str]]  # team_id -> patterns
+
+    # Lifecycle
+    status: Literal["active", "completed", "archived"]
+    created_at: datetime
+    completed_at: datetime | None
+```
+
+### Sandbox Hierarchy
+
+```
+Department Level
+    │
+    ├── Mission Sandbox: contract-nexus-review
+    │   │
+    │   │   Shared context for this transaction only:
+    │   │   - The contract under review
+    │   │   - Cross-team message thread (UNI-Q micro)
+    │   │   - Published findings from each team
+    │   │
+    │   ├── Legal Team (working in mission sandbox)
+    │   │   └── Agent sandboxes (task-specific)
+    │   │
+    │   ├── Risk Team (working in mission sandbox)
+    │   │   └── Agent sandboxes (task-specific)
+    │   │
+    │   └── Management Team (working in mission sandbox)
+    │       └── Agent sandboxes (task-specific)
+    │
+    └── Mission Sandbox: contract-dataflow-review
+        │   (completely isolated from nexus review)
+        ...
+```
+
+### Why Mission Sandboxes?
+
+1. **Isolation** - Concurrent transactions don't pollute each other's context
+2. **Cleanup** - When transaction completes, archive the sandbox (audit trail preserved)
+3. **Focus** - Teams only see context relevant to THIS transaction
+4. **Security** - Contract A's details can't leak into Contract B's reasoning
+
+---
+
+## Subscription Model
+
+### Team Subscriptions (Department Level)
+
+Teams register patterns they care about with the department orchestrator:
+
+```python
+department_subscriptions = {
+    "risk_team": [
+        "Ⓣcontract·*",           # All contract tasks
+        "Ⓥdecision·*⟨risk:*⟩",   # Decisions mentioning risk
+        "Ⓔvendor·*⚠",            # Any vendor with warning flag
+    ],
+    "legal_team": [
+        "Ⓣcontract·*",           # All contract tasks
+        "Ⓥrisk-assessment·*",    # All risk assessments
+        "Ⓔvendor·*⟨compliance:*⟩",  # Compliance-related vendors
+    ],
+    "management_team": [
+        "Ⓥdecision·*→Ⓐmgmt",     # Decisions routed to them
+        "Ⓣcontract·*⟨val:>100K⟩",  # High-value contracts
+        "Ⓥ*·*⚠",                  # Anything with warning flag
+    ],
+}
+```
+
+### Agent Subscriptions (Team Level)
+
+Agents within a team register patterns with their team orchestrator:
+
+```python
+legal_team_subscriptions = {
+    "research_agent": [
+        "Ⓣ*·legal-research",      # All legal research tasks
+    ],
+    "draft_agent": [
+        "Ⓥresearch·*✓",           # Completed research
+        "Ⓥreview·*⟨revision:*⟩",  # Review feedback requiring revision
+    ],
+    "review_agent": [
+        "Ⓥdraft·*✓",              # Completed drafts
+    ],
+    "citation_agent": [
+        "Ⓥdraft·*◐",              # Drafts in progress (parallel citation check)
+    ],
+}
+```
+
+### Subscription Matching
+
+The orchestrator matches published messages against registered patterns:
+
+```python
+def match_subscriptions(message: str, subscriptions: dict) -> list[str]:
+    """Return list of subscribers whose patterns match this message."""
+    subscribers = []
+    for subscriber, patterns in subscriptions.items():
+        for pattern in patterns:
+            if pattern_matches(message, pattern):
+                subscribers.append(subscriber)
+                break
+    return subscribers
+```
+
+### Routing Flow
+
+```
+1. Agent publishes:     Ⓥresearch·nexus-precedents✓⟨sources:12⟩
+
+2. Orchestrator matches:
+   - draft_agent: ✓ (matches Ⓥresearch·*✓)
+   - citation_agent: ✗ (matches ◐, not ✓)
+
+3. Orchestrator routes to draft_agent
+
+4. Orchestrator can also:
+   - Override routing decisions
+   - Add checkpoints before delivery
+   - Intervene when flags appear
+   - Escalate to human
+```
+
+### The Orchestrator Remains the Hub
+
+The fractal subscription model does NOT mean peer-to-peer communication. The orchestrator:
+- Receives all published messages
+- Matches against subscriptions
+- Decides routing (can override subscription matches)
+- Maintains audit trail
+- Enforces checkpoints
+
+```
+Publisher → Orchestrator → [Subscription Matching] → Subscribers
+                ↓
+         [Override/Checkpoint/Escalate if needed]
+```
+
+---
+
+## Full Fractal Stack
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    MISSION SANDBOX                                   │
+│                    (transaction scope)                               │
+│                                                                      │
+│    ┌───────────────────────────────────────────────────────────┐    │
+│    │              DEPARTMENT LEVEL                              │    │
+│    │              UNI-Q pub/sub via Dept Head                   │    │
+│    │                                                            │    │
+│    │   ┌─────────────────────────────────────────────────┐     │    │
+│    │   │           TEAM LEVEL                             │     │    │
+│    │   │           UNI-Q pub/sub via Team Orchestrator    │     │    │
+│    │   │                                                  │     │    │
+│    │   │   ┌─────────────────────────────────────┐       │     │    │
+│    │   │   │        AGENT LEVEL                   │       │     │    │
+│    │   │   │        UNI-Q pub/sub via Agent       │       │     │    │
+│    │   │   │        (if task decomposition needed)│       │     │    │
+│    │   │   └─────────────────────────────────────┘       │     │    │
+│    │   │                                                  │     │    │
+│    │   └─────────────────────────────────────────────────┘     │    │
+│    │                                                            │    │
+│    └───────────────────────────────────────────────────────────┘    │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+At every level:
+- Same UNI-Q micro format
+- Same subscription matching
+- Same resolution system (micro/summary/full)
+- Same hub routing (orchestrator at that level)
+- Same message thread (within that sandbox)
+```
+
+---
+
 ## Quick Reference Card
 
 ```

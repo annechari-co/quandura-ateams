@@ -408,4 +408,256 @@ When building these patterns:
 
 ---
 
+## Example 3: Fractal Architecture Analysis
+
+This section documents the design rationale for using the same UNI-Q pattern at every organizational level.
+
+### The Questions
+
+1. **Should cross-team transactions spin up their own sandbox?**
+2. **Should inter-agent (within a team) communications use the same UNI-Q/subscription structure as inter-team communications?**
+
+### Context: Why Sandboxes Exist
+
+From the architecture document, sandboxes serve three purposes:
+1. **Cost efficiency** - Minimal tokens per agent
+2. **Quality** - Focused context = better reasoning
+3. **Security** - Agents can't leak what they don't have
+
+Currently, sandboxes exist for **intra-team** work - when an orchestrator delegates to specialists. But cross-team transactions like contract review create a shared context that spans multiple teams.
+
+---
+
+### Answer 1: Yes, Transactions Need Mission Sandboxes
+
+**Rationale:**
+
+When Legal, Risk, and Management coordinate on a contract review, they create a shared context. Without isolation:
+- Context from Contract A could pollute reasoning about Contract B
+- Cleanup is messy (what belongs to which transaction?)
+- Security is harder (who should see what?)
+
+**The Solution: Mission Sandbox**
+
+Each cross-team transaction spins up its own sandbox:
+
+```
+Department Level
+    │
+    ├── Mission Sandbox: contract-nexus-review
+    │   │
+    │   │   Shared context for this transaction only:
+    │   │   - The contract under review
+    │   │   - Cross-team message thread (UNI-Q micro)
+    │   │   - Published findings from each team
+    │   │
+    │   ├── Legal Team (working in mission sandbox)
+    │   │   └── Agent sandboxes (task-specific)
+    │   │
+    │   ├── Risk Team (working in mission sandbox)
+    │   │   └── Agent sandboxes (task-specific)
+    │   │
+    │   └── Management Team (working in mission sandbox)
+    │       └── Agent sandboxes (task-specific)
+    │
+    └── Mission Sandbox: contract-dataflow-review
+        │   (completely isolated from nexus review)
+        ...
+```
+
+**Benefits:**
+1. **Isolation** - Concurrent transactions don't pollute each other's context
+2. **Cleanup** - When transaction completes, archive the sandbox (audit trail preserved)
+3. **Focus** - Teams only see context relevant to THIS transaction
+4. **Security** - Contract A's details can't leak into Contract B's reasoning
+
+---
+
+### Answer 2: Yes, Use the Same Pattern at Every Level (Fractal Design)
+
+**The Intuition:**
+
+> "My intuition is to say the system will be more robust if they are the same (so the structure is almost 'fractal' - you can zoom-in/zoom-out and it is all operating the same way)."
+
+This intuition is correct. Here's the analysis:
+
+**Current State:**
+- Inter-team: Orchestrators communicate via Department Head (hub-and-spoke)
+- Intra-team: Specialists only talk to their Team Orchestrator (hub-and-spoke)
+
+**The Question:** Should specialists within a team use the same UNI-Q subscription model that teams use with each other?
+
+**The Concern:**
+
+The hub-and-spoke principle exists for:
+1. **Control** - Orchestrator manages flow
+2. **Auditability** - All communication goes through a single point
+3. **Simplicity** - Specialists don't need to know about each other
+
+**The Resolution:**
+
+These goals don't conflict with using UNI-Q format - they conflict with **direct peer communication**. We can have both:
+
+```
+Same format + Same mechanism + Hub routing = Fractal with discipline
+```
+
+**How It Works:**
+
+```
+INTER-TEAM (current UNI-Q design):
+─────────────────────────────────
+Legal publishes:  Ⓥrisk-assessment·nexus⚠✓
+                        │
+                        ▼
+              Department Orchestrator
+                        │
+              (routes via subscriptions)
+                        │
+                        ▼
+              Risk, Management receive
+
+
+INTRA-TEAM (same pattern):
+──────────────────────────
+Research Agent publishes:  Ⓥresearch·nexus-precedents✓⟨sources:12⟩
+                                    │
+                                    ▼
+                          Team Orchestrator
+                                    │
+                          (routes via subscriptions)
+                                    │
+                                    ▼
+                          Draft Agent, Review Agent receive
+```
+
+**The Key Insight:** The orchestrator is still the hub. But instead of manually routing, it routes based on subscriptions. The pattern is the same at every level:
+
+| Level | Publisher | Hub (Router) | Subscribers |
+|-------|-----------|--------------|-------------|
+| Department | Team Orchestrators | Dept Head | Other Team Orchestrators |
+| Team | Specialist Agents | Team Orchestrator | Other Specialists |
+| Agent | Sub-tasks | Agent | Sub-task handlers |
+
+---
+
+### Intra-Team Subscription Example
+
+```python
+# Legal Team - Agent Subscriptions
+legal_team_subscriptions = {
+    "research_agent": [
+        "Ⓣ*·legal-research",      # All legal research tasks
+    ],
+    "draft_agent": [
+        "Ⓥresearch·*✓",           # Completed research
+        "Ⓥreview·*⟨revision:*⟩",  # Review feedback requiring revision
+    ],
+    "review_agent": [
+        "Ⓥdraft·*✓",              # Completed drafts
+    ],
+    "citation_agent": [
+        "Ⓥdraft·*◐",              # Drafts in progress (parallel citation check)
+    ],
+}
+```
+
+**Workflow with Fractal Design:**
+
+```
+1. Task arrives at Legal Team Orchestrator
+   Ⓣresearch·nexus-contract-legality
+
+2. Orchestrator matches subscriptions → routes to Research Agent
+
+3. Research Agent completes, publishes:
+   Ⓥresearch·nexus-precedents✓⟨sources:12⟩
+
+4. Orchestrator matches subscriptions → routes to Draft Agent AND Citation Agent
+   (parallel work)
+
+5. Draft Agent completes, publishes:
+   Ⓥdraft·nexus-opinion✓μ:high
+
+6. Orchestrator matches → routes to Review Agent
+
+7. Review Agent finds issue, publishes:
+   Ⓥreview·nexus-opinion⚐⟨revision:citation-missing⟩
+
+8. Orchestrator matches → routes back to Draft Agent (revision subscription)
+```
+
+**The orchestrator still controls** - it can:
+- Override routing decisions
+- Add checkpoints
+- Intervene when flags appear
+- Escalate to human
+
+But the *mechanism* is the same as inter-team: publish → match subscriptions → route.
+
+---
+
+### Benefits of Fractal Design
+
+1. **One pattern to implement** - The subscription/routing logic is identical at every level
+2. **One pattern to debug** - Same tools work everywhere
+3. **Composable** - A team can be treated as an "agent" at the department level
+4. **Emergent scaling** - Patterns that work at team level naturally apply if we add sub-teams
+5. **Consistent UNI-Q** - Same micro format flows at all levels
+
+---
+
+### The Full Fractal Picture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    MISSION SANDBOX                                   │
+│                    (transaction scope)                               │
+│                                                                      │
+│    ┌───────────────────────────────────────────────────────────┐    │
+│    │              DEPARTMENT LEVEL                              │    │
+│    │              UNI-Q pub/sub via Dept Head                   │    │
+│    │                                                            │    │
+│    │   ┌─────────────────────────────────────────────────┐     │    │
+│    │   │           TEAM LEVEL                             │     │    │
+│    │   │           UNI-Q pub/sub via Team Orchestrator    │     │    │
+│    │   │                                                  │     │    │
+│    │   │   ┌─────────────────────────────────────┐       │     │    │
+│    │   │   │        AGENT LEVEL                   │       │     │    │
+│    │   │   │        UNI-Q pub/sub via Agent       │       │     │    │
+│    │   │   │        (if task decomposition needed)│       │     │    │
+│    │   │   └─────────────────────────────────────┘       │     │    │
+│    │   │                                                  │     │    │
+│    │   └─────────────────────────────────────────────────┘     │    │
+│    │                                                            │    │
+│    └───────────────────────────────────────────────────────────┘    │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+At every level:
+- Same UNI-Q micro format
+- Same subscription matching
+- Same resolution system (micro/summary/full)
+- Same hub routing (orchestrator at that level)
+- Same message thread (within that sandbox)
+```
+
+---
+
+### Cost-Benefit Summary
+
+| Aspect | Cost | Benefit |
+|--------|------|---------|
+| Mission sandbox | Sandbox lifecycle management | Transaction isolation, clean archives |
+| Fractal pub/sub | Slightly more routing logic | One pattern everywhere, composability |
+| Intra-team UNI-Q | Agents need to publish in format | Consistent debugging, same tools |
+
+**Recommendation:** Both are worth it. The implementation cost is low (we're building the pub/sub anyway), and the architectural consistency pays dividends in:
+- **Debugging** (same patterns everywhere)
+- **Testing** (same test harness works at all levels)
+- **Scaling** (add levels without new patterns)
+- **Understanding** (explain once, applies everywhere)
+
+---
+
 *Reference for Quandura implementation. See UNIQ_SPEC.md for full grammar specification.*
