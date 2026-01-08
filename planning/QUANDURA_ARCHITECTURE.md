@@ -40,6 +40,8 @@ Quandura is an enterprise AI agent platform targeting local government operation
 10. **Execution-based verification** - Run generated outputs to verify, don't just review them
 11. **Precedent-based reasoning** - Capture the "why" behind decisions via typed relationships
 12. **Team-pluggable schemas** - Universal layer structure, domain-specific types per team
+13. **Fractal architecture** - Same communication pattern at every level (department, team, agent)
+14. **Humans as agents** - Humans participate in the system via the same message/subscription model
 
 ---
 
@@ -770,6 +772,517 @@ Rules:
 - Team Orchestrators report to Department Head
 - Cross-team communication goes through Department Head
 - Librarians share knowledge through Platform Intelligence layer
+```
+
+---
+
+## UNI-Q: Agent Communication Grammar
+
+> **Full specification:** See `planning/research/UNIQ_SPEC.md` for complete grammar and implementation details.
+> **Examples:** See `planning/research/UNIQ_EXAMPLES.md` for practical scenarios.
+
+UNI-Q is a token-efficient grammar for agent-to-agent communication. It provides consistent message formatting across all levels of the system (fractal architecture).
+
+### Core Symbols
+
+| Symbol | Type | Description |
+|--------|------|-------------|
+| `Ⓐ` | Agent | Agent identifier (e.g., `Ⓐlegal-orch`) |
+| `Ⓣ` | Task | Task assignment |
+| `Ⓥ` | Verdict/Value | Decision or result |
+| `Ⓔ` | Entity | Domain object reference |
+| `Ⓞ` | Operational | Policy or rule reference |
+| `Ⓢ` | Strategic | Goal or priority reference |
+| `Ⓡ` | Request | Cross-team consultation request |
+| `Ⓗ` | Human | Human agent (escalation target) |
+| `Ⓖ` | Gateway | External system interface |
+| `Ⓜ` | Metric | Analytics/business event |
+
+### Status Modifiers
+
+| Modifier | Meaning |
+|----------|---------|
+| `✓` | Completed/approved |
+| `✗` | Failed/rejected |
+| `◐` | In progress |
+| `⚠` | Warning/attention needed |
+| `⊘` | Blocked |
+
+### Message Examples
+
+```
+# Task assignment
+Ⓐohs-orch → Ⓐparser: Ⓣparse·inspection-2024-0089⟨artifacts:ref-001⟩
+
+# Task completion
+Ⓐparser → Ⓐohs-orch: Ⓥparsed-data·inspection-2024-0089✓⟨findings:12⟩
+
+# Cross-team request
+Ⓐohs-orch → Ⓐdept-orch: Ⓡcitation-request⟨to:legal·findings:5⟩
+
+# Human escalation
+Ⓐohs-orch → Ⓗsignoff-authority: Ⓔescalation·signoff⟨mission:X·artifact:report-ref⟩
+
+# External transmission
+Ⓐfinance-orch → Ⓖgateway: Ⓣtransmit⟨to:client·artifact:invoice-ref⟩
+
+# Metric event
+Ⓜmetric·revenue⟨team:ohs·amount:4050·mission:inspection-2024-0089⟩
+```
+
+### Multi-Resolution Content
+
+Every memory node has three representations:
+
+| Resolution | Tokens | Use Case |
+|------------|--------|----------|
+| **Micro** | ~10-20 | Routing, monitoring, dashboards |
+| **Summary** | ~50-100 | Reasoning, decision context |
+| **Full** | Unlimited | Audit, deep analysis |
+
+**Query intent determines resolution:**
+- `ROUTE`, `MONITOR` → micro
+- `REASON`, `DECIDE` → summary
+- `DRAFT`, `AUDIT` → full
+
+---
+
+## Fractal Architecture
+
+The same UNI-Q pub/sub pattern applies at every level of the hierarchy:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  DEPARTMENT LEVEL                                                    │
+│  ┌─────────────────┐                                                │
+│  │ Dept Orchestrator│ ← Routes between teams via subscriptions      │
+│  └────────┬────────┘                                                │
+│           │                                                          │
+│  ┌────────┼────────┬────────────┬────────────┐                      │
+│  ▼        ▼        ▼            ▼            ▼                      │
+│  OHS    Legal    Finance    C-Suite      Gateway                    │
+│  Team    Team     Team       Team        (External)                 │
+└─────────────────────────────────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  TEAM LEVEL (e.g., OHS Team)                                        │
+│  ┌─────────────────┐                                                │
+│  │ Team Orchestrator│ ← Routes between agents via subscriptions     │
+│  └────────┬────────┘                                                │
+│           │                                                          │
+│  ┌────────┼────────┬────────────┬────────────┐                      │
+│  ▼        ▼        ▼            ▼            ▼                      │
+│ Parser  Analyst  Drafter    Reviewer    Librarian                   │
+│ Agent   Agent    Agent      Agent                                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key insight:** Hub-and-spoke is maintained at each level. Orchestrators route based on subscriptions, but agents don't talk directly to each other.
+
+### Subscription Model
+
+Teams and agents subscribe to message patterns they care about:
+
+```python
+# Department-level subscriptions
+department_subscriptions = {
+    "ohs_team": [
+        "Ⓣinspection·*",           # All inspection tasks
+        "Ⓥcitations·*✓",           # Citation responses from legal
+    ],
+    "legal_team": [
+        "Ⓡcitation-request·*",     # Citation requests from any team
+        "Ⓣcontract-review·*",      # Contract review tasks
+    ],
+    "finance_team": [
+        "Ⓣbilling-request·*",      # Billing requests from any team
+        "Ⓥpayment-received·*",     # Payment notifications
+    ],
+}
+
+# Team-level subscriptions (within OHS team)
+ohs_agent_subscriptions = {
+    "parser_agent": ["Ⓣparse·*"],
+    "analyst_agent": ["Ⓥparsed-data·*✓"],
+    "drafter_agent": ["Ⓥfindings·*✓", "Ⓥcitations·*✓"],
+    "reviewer_agent": ["Ⓥdraft·*✓"],
+}
+```
+
+---
+
+## Mission Sandboxes
+
+Cross-team and intra-team work happens in isolated sandboxes with shared context.
+
+### Sandbox Types
+
+| Type | Use Case | Lifecycle |
+|------|----------|-----------|
+| **Light** | Quick request/response (e.g., citation lookup) | Auto-close on response |
+| **Standard** | Multi-step collaboration (e.g., contract review) | Manual close |
+
+```python
+class MissionSandbox(BaseModel):
+    """Isolated workspace for a mission."""
+
+    mission_id: str
+    tenant_id: str
+    complexity: Literal["light", "standard"] = "light"
+
+    # Shared workspace
+    shared_artifacts: dict[str, str]      # Artifact references
+    message_thread: list[str]             # UNI-Q message history
+    published_findings: dict[str, str]    # team_id -> finding reference
+
+    # Subscriptions for this mission
+    team_subscriptions: dict[str, list[str]]  # team_id -> patterns
+
+    # Lifecycle
+    status: Literal["active", "completed", "archived"]
+    auto_close_on: str | None = None      # Pattern that triggers auto-close
+    created_at: datetime
+    completed_at: datetime | None
+```
+
+**Key decision:** All cross-boundary interactions use sandboxes. No separate "consultation" pattern. Light sandboxes are cheap; consistency is valuable.
+
+---
+
+## Human-in-Loop Protocol
+
+Humans participate in the agent system as special agents with the `Ⓗ` symbol.
+
+```python
+class HumanAgent(BaseModel):
+    """Human participant in the agent system."""
+
+    agent_id: str              # e.g., "Ⓗjane-doe" or "Ⓗsignoff-authority"
+    role: str                  # e.g., "inspector", "attorney", "manager"
+    subscriptions: list[str]   # Message patterns they see
+    inbox: list[PendingAction] # Work items awaiting human action
+
+
+class PendingAction(BaseModel):
+    """Action awaiting human decision."""
+
+    action_id: str
+    mission_id: str
+    action_type: Literal["approval", "decision", "review", "exception"]
+    context_summary: str       # Human-readable summary
+    artifact_refs: list[str]   # What to review
+    allowed_actions: list[str] # e.g., ["approve", "reject", "revise"]
+    deadline: datetime | None
+    claimed_by: str | None
+    status: Literal["pending", "claimed", "completed"]
+```
+
+### Human Escalation Flow
+
+```
+Agent identifies need for human action
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  Ⓐagent → Ⓗrole: Ⓔescalation·...   │  Same message format
+└─────────────────┬───────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────┐
+│        Human Inbox (UI)             │
+│  - View pending escalations         │
+│  - Review artifacts                 │
+│  - Take action (approve/reject/etc) │
+└─────────────────┬───────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────┐
+│  Ⓗhuman → Ⓐagent: Ⓥaction·...✓     │  Response as message
+└─────────────────────────────────────┘
+```
+
+**Key insight:** Humans are slow, expensive agents. Same routing, same audit trail.
+
+---
+
+## External Gateway
+
+Single bidirectional interface between the agent system and external world.
+
+```python
+class ExternalGateway:
+    """Bridge between external world and agent system."""
+
+    # Inbound: External → System
+    async def receive(
+        self,
+        source: str,
+        source_type: Literal["api", "upload", "integration"],
+        payload: dict,
+        artifacts: list[bytes],
+        trust_level: Literal["verified", "unverified"]
+    ) -> str:
+        """
+        Receive external input.
+        Unverified sources go to human review queue (de-scaffolding).
+        Returns intake_id for tracking.
+        """
+
+    # Outbound: System → External
+    async def transmit(
+        self,
+        destination_type: Literal["email", "portal", "api"],
+        recipient: ExternalRecipient,
+        artifact_refs: list[str],
+        message_template: str,
+        require_human_review: bool = True  # De-scaffolding
+    ) -> TransmissionReceipt:
+        """
+        Send artifacts to external recipient.
+        Returns receipt with delivery status.
+        """
+```
+
+### Gateway Message Flow
+
+```
+# Inbound
+External App → Ⓖgateway: (raw data)
+Ⓖgateway → Ⓐdept-orch: Ⓣintake·mission-001⟨source:inspection-app⟩
+
+# Outbound
+Ⓐteam-orch → Ⓖgateway: Ⓣtransmit⟨to:client·channel:email·artifact:report⟩
+Ⓖgateway → Ⓐteam-orch: Ⓥtransmitted✓⟨receipt:TXN-001⟩
+```
+
+---
+
+## Artifact Store
+
+Mission-scoped storage for documents, photos, and other artifacts.
+
+```python
+class ArtifactStore:
+    """Central artifact storage with mission-scoped access."""
+
+    async def store(
+        self,
+        mission_id: str,
+        artifact_type: str,
+        content: bytes,
+        metadata: dict
+    ) -> str:
+        """Store artifact, return reference URI."""
+        # Returns: artifact:mission-001/findings-v2
+
+    async def retrieve(
+        self,
+        artifact_ref: str,
+        requesting_agent: str
+    ) -> bytes:
+        """Retrieve artifact if agent has mission access."""
+
+    async def list_artifacts(self, mission_id: str) -> list[ArtifactMetadata]:
+        """List all artifacts in a mission."""
+```
+
+**URI scheme:** `artifact:{mission_id}/{artifact_name}`
+
+UNI-Q messages reference artifacts, not contain them:
+```
+Ⓥfindings·inspection-001✓⟨artifact:inspection-001/findings-v2⟩
+```
+
+---
+
+## Temporal Service
+
+Time-based triggers for reminders, deadlines, and scheduled events.
+
+```python
+class TemporalTrigger(BaseModel):
+    """Scheduled event that fires a UNI-Q message."""
+
+    trigger_id: str
+    mission_id: str
+    fire_at: datetime
+    message: str              # UNI-Q message to send
+    target: str               # Recipient agent
+    repeat: Literal["once", "daily", "weekly"] = "once"
+    cancel_on: list[str]      # Message patterns that cancel this trigger
+
+
+class TemporalService:
+    async def schedule(self, trigger: TemporalTrigger) -> str:
+        """Schedule a trigger, return trigger_id."""
+
+    async def cancel(self, trigger_id: str) -> bool:
+        """Cancel a scheduled trigger."""
+```
+
+**Example: Payment tracking**
+```python
+# When invoice is sent, schedule payment reminders
+await temporal.schedule(TemporalTrigger(
+    mission_id="inspection-2024-0089",
+    fire_at=invoice_date + timedelta(days=30),
+    message="Ⓣpayment-reminder⟨mission:inspection-2024-0089·days:30⟩",
+    target="Ⓐar-agent",
+    cancel_on=["Ⓥpayment-received·inspection-2024-0089*"]
+))
+```
+
+---
+
+## Template Registry
+
+Versioned document templates with rendering capability.
+
+```python
+class Template(BaseModel):
+    """Document template definition."""
+
+    template_id: str
+    name: str
+    version: str
+    content_type: Literal["docx", "html", "pdf"]
+    schema: dict              # Required fields for filling
+    variants: dict[str, str]  # client_id -> variant_version
+
+
+class TemplateRegistry:
+    async def get_template(
+        self,
+        template_id: str,
+        client_id: str | None = None
+    ) -> Template:
+        """Get template, using client variant if exists."""
+
+    async def render(
+        self,
+        template_id: str,
+        data: dict,
+        output_format: str = "pdf"
+    ) -> bytes:
+        """Fill template with data, return rendered document."""
+```
+
+---
+
+## Metrics Service
+
+Event-based analytics for business intelligence.
+
+```python
+class MetricEvent(BaseModel):
+    """Business event for analytics."""
+
+    event_type: str
+    mission_id: str | None
+    team_id: str
+    dimensions: dict          # Filterable attributes
+    measures: dict            # Numeric values
+    timestamp: datetime
+
+
+# Example events
+MetricEvent(
+    event_type="mission_completed",
+    mission_id="inspection-2024-0089",
+    team_id="ohs_team",
+    dimensions={"mission_type": "facility_inspection", "client": "county-X"},
+    measures={"duration_days": 12, "findings_count": 5}
+)
+
+MetricEvent(
+    event_type="revenue_recognized",
+    mission_id="inspection-2024-0089",
+    team_id="finance_team",
+    dimensions={"revenue_type": "consulting"},
+    measures={"gross": 4500, "net": 4050}
+)
+```
+
+**UNI-Q format:**
+```
+Ⓜmetric·mission-completed⟨team:ohs·type:inspection·duration:12d⟩
+```
+
+---
+
+## Mission Lifecycle State Machine
+
+Explicit states with defined transitions for auditability.
+
+```python
+class MissionStatus(str, Enum):
+    # Normal flow
+    INTAKE = "intake"
+    PROCESSING = "processing"
+    PENDING_EXTERNAL = "pending_external"    # Waiting on cross-team
+    PENDING_HUMAN = "pending_human"          # Waiting on human
+    DELIVERABLE_READY = "deliverable_ready"
+    DELIVERED = "delivered"
+    INVOICED = "invoiced"
+    PAYMENT_PENDING = "payment_pending"
+    PAID = "paid"
+    CLOSED = "closed"
+
+    # Exception states
+    BLOCKED = "blocked"
+    ESCALATED = "escalated"
+    CANCELLED = "cancelled"
+```
+
+**State transition diagram:**
+```
+INTAKE → PROCESSING → PENDING_EXTERNAL → PROCESSING → DELIVERABLE_READY
+                   └→ PENDING_HUMAN ────┘
+                              ↓
+         DELIVERABLE_READY → DELIVERED → INVOICED → PAYMENT_PENDING → PAID → CLOSED
+
+Exception paths:
+- Any → BLOCKED (waiting on dependency)
+- Any → ESCALATED (needs human intervention)
+- DELIVERABLE_READY → PROCESSING (revision needed)
+- PAYMENT_PENDING → ESCALATED (collections)
+```
+
+---
+
+## Finance Team
+
+Dedicated team for financial operations.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  FINANCE TEAM                                                        │
+│                                                                      │
+│  ┌─────────────────┐                                                │
+│  │Finance Orchestrator│                                              │
+│  └────────┬────────┘                                                │
+│           │                                                          │
+│  ┌────────┼────────┬────────────┬────────────┬──────────┐          │
+│  ▼        ▼        ▼            ▼            ▼          ▼          │
+│ Invoice  AR      Payment      Tax       Reconcil-  Librarian       │
+│ Agent   Agent    Agent       Agent      iation                      │
+│                                          Agent                       │
+└─────────────────────────────────────────────────────────────────────┘
+
+Responsibilities:
+- Invoice Agent: Generate invoices from billing requests
+- AR Agent: Track receivables, send reminders, manage collections
+- Payment Agent: Match payments to invoices, record receipts
+- Tax Agent: Calculate and allocate taxes (federal/state/local)
+- Reconciliation Agent: Update accounts, generate financial reports
+```
+
+**Integration pattern:**
+```
+Ⓐohs-orch → Ⓐdept-orch: Ⓣbilling-request⟨mission:X·scope-ref:Y⟩
+Ⓐdept-orch → Ⓐfinance-orch: Ⓣbilling-request⟨from:ohs·mission:X⟩
+Ⓐfinance-orch → Ⓐinvoice-agent: Ⓣgenerate-invoice⟨...⟩
 ```
 
 ---
@@ -2285,10 +2798,28 @@ For the new Claude instance taking over implementation:
 
 ---
 
-*Version: 2.2*
+*Version: 2.3*
 *Created: 2025-01-05*
-*Updated: 2025-01-06*
+*Updated: 2025-01-08*
 *Status: Complete architecture specification for implementation handoff*
+
+## Changes in v2.3
+
+- Added UNI-Q communication grammar with full symbol reference
+- Added new symbols: `Ⓡ` (Request), `Ⓗ` (Human), `Ⓖ` (Gateway), `Ⓜ` (Metric)
+- Added Fractal Architecture section (same pattern at every level)
+- Added Mission Sandboxes (light vs standard, parameterized)
+- Added Human-in-Loop Protocol (humans as special agents)
+- Added External Gateway (bidirectional external interface with de-scaffolding)
+- Added Artifact Store (mission-scoped document storage)
+- Added Temporal Service (time-based triggers and reminders)
+- Added Template Registry (versioned document templates)
+- Added Metrics Service (event-based analytics)
+- Added Mission Lifecycle State Machine (explicit states)
+- Added Finance Team specification
+- Added Design Principles 13-14 (fractal architecture, humans as agents)
+- Referenced UNIQ_SPEC.md and UNIQ_EXAMPLES.md for detailed specifications
+- Referenced SCENARIO_OHS_INSPECTION.md and DECISION_LOG.md for design rationale
 
 ## Changes in v2.2
 
